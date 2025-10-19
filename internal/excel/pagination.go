@@ -71,7 +71,6 @@ func (s *ExcelizeFixedSizePagingStrategy) CalculatePagingRanges() []string {
 	return ranges
 }
 
-
 func NewOlePagingStrategy(pageSize int, worksheet *OleWorksheet) (PagingStrategy, error) {
 	if worksheet == nil {
 		return nil, fmt.Errorf("worksheet is nil")
@@ -155,7 +154,6 @@ func (s *OleFixedSizePagingStrategy) CalculatePagingRanges() []string {
 
 	return ranges
 }
-
 
 // PrintAreaPagingStrategy は印刷範囲とページ区切りに基づいてページング範囲を計算する戦略
 type PrintAreaPagingStrategy struct {
@@ -246,7 +244,6 @@ func (s *PrintAreaPagingStrategy) CalculatePagingRanges() []string {
 	return s.calculateRangesFromBreaks(printArea, breaks)
 }
 
-
 // PagingRangeService はページング処理を提供するサービス
 type PagingRangeService struct {
 	strategy PagingStrategy
@@ -261,7 +258,6 @@ func NewPagingRangeService(strategy PagingStrategy) *PagingRangeService {
 func (s *PagingRangeService) GetPagingRanges() []string {
 	return s.strategy.CalculatePagingRanges()
 }
-
 
 // FilterRemainingPagingRanges は未読の範囲のリストを返す
 func (s *PagingRangeService) FilterRemainingPagingRanges(allRanges []string, knownRanges []string) []string {
