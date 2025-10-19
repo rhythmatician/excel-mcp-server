@@ -3,6 +3,8 @@
 /memory-bank
 # Added by goreleaser init:
 dist/
+# Binary
+excel-mcp-server
 # RooFlow
 .roo
 .roomodes
