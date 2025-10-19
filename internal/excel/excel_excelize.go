@@ -139,7 +139,20 @@ func (w *ExcelizeWorksheet) SetValue(cell string, value any) error {
 }
 
 func (w *ExcelizeWorksheet) SetFormula(cell string, formula string) error {
-	if err := w.file.SetCellFormula(w.sheetName, cell, formula); err != nil {
+	// Check if this formula requires array formula handling
+	var err error
+	if requiresArrayFormulaType(formula) {
+		// Mark as array formula for proper Excel compatibility
+		formulaType := excelize.STCellFormulaTypeArray
+		err = w.file.SetCellFormula(w.sheetName, cell, formula, excelize.FormulaOpts{
+			Type: &formulaType,
+			Ref:  &cell,
+		})
+	} else {
+		err = w.file.SetCellFormula(w.sheetName, cell, formula)
+	}
+
+	if err != nil {
 		return err
 	}
 	if err := w.updateDimension(cell); err != nil {
@@ -580,4 +593,74 @@ func (w *ExcelizeWorksheet) updateDimension(updatedCell string) error {
 	}
 	updatedDimension := fmt.Sprintf("%s:%s", startRange, endRange)
 	return w.file.SetSheetDimension(w.sheetName, updatedDimension)
+}
+
+// requiresArrayFormulaType determines if a formula should be marked as an array formula
+// for proper Excel compatibility. This is needed for formulas that use array operations
+// in ways that older Excel versions (or Excel when opening files) require explicit
+// array formula marking.
+func requiresArrayFormulaType(formula string) bool {
+	// Remove leading '=' if present for easier pattern matching
+	f := strings.TrimPrefix(formula, "=")
+
+	// Pattern 1: Boolean array multiplication for multi-criteria matching
+	// Example: (array1=value)*(array2=value)
+	// This pattern is commonly used in INDEX/MATCH and XLOOKUP formulas
+	if strings.Contains(f, ")*(") {
+		// Check if this looks like boolean array operations
+		// These typically have comparison operators before the multiplication
+		if strings.Contains(f, "<=") || strings.Contains(f, ">=") ||
+			strings.Contains(f, "<>") || strings.Contains(f, "=") {
+			return true
+		}
+	}
+
+	// Pattern 2: SUMPRODUCT with array operations and ROW/COLUMN functions
+	// Example: SUMPRODUCT((...)*(...)*ROW(...))
+	if strings.Contains(f, "SUMPRODUCT") && strings.Contains(f, ")*(") {
+		if strings.Contains(f, "ROW(") || strings.Contains(f, "COLUMN(") {
+			return true
+		}
+	}
+
+	// Pattern 3: MATCH with concatenated array comparisons
+	// Example: MATCH(val1&"-"&val2, array1&"-"&array2, 0)
+	if strings.Contains(f, "MATCH(") {
+		// Count the number of '&' operators - if used with arrays in MATCH, likely needs array treatment
+		// Look for patterns like: array&"-"&array within MATCH
+		matchStart := strings.Index(f, "MATCH(")
+		if matchStart >= 0 {
+			// Find the closing parenthesis for MATCH
+			depth := 1
+			matchContent := ""
+			for i := matchStart + 6; i < len(f) && depth > 0; i++ {
+				if f[i] == '(' {
+					depth++
+				} else if f[i] == ')' {
+					depth--
+				}
+				if depth > 0 {
+					matchContent += string(f[i])
+				}
+			}
+			// If MATCH contains both array references and concatenation
+			if strings.Contains(matchContent, "&") && strings.Contains(matchContent, ":") {
+				return true
+			}
+		}
+	}
+
+	// Pattern 4: INDEX with MATCH using array multiplication
+	// Example: INDEX(array, MATCH(1, (condition1)*(condition2), 0))
+	if strings.Contains(f, "INDEX(") && strings.Contains(f, "MATCH(") && strings.Contains(f, ")*(") {
+		return true
+	}
+
+	// Pattern 5: XLOOKUP with array multiplication for multi-criteria
+	// Example: XLOOKUP(1, (condition1)*(condition2), result)
+	if strings.Contains(f, "XLOOKUP(") && strings.Contains(f, ")*(") {
+		return true
+	}
+
+	return false
 }
